@@ -18,7 +18,7 @@ echo "src-git-full luci2 https://github.com/coolsnowwolf/luci.git" >> ./feeds.co
 ./scripts/feeds update luci2
 ./scripts/feeds install luci-app-cpufreq
 ./scripts/feeds install luci-app-diskman
-sed -i 's/set wireless.radio${devidx}.disabled=1/set wireless.radio${devidx}.disabled=0/g' ./package/kernel/mac80211/files/lib/wifi/mac80211.sh
+sed -i 's/set wireless.${name}.disabled=1/set wireless.${name}.disabled=0/g' ./package/kernel/mac80211/files/lib/wifi/mac80211.sh
 wget -P ./package/base-files/files/usr/local/share/xray/ https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat
 wget -P ./package/base-files/files/usr/local/share/xray/ https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
 #~/work/Actions-OpenWrt/Actions-OpenWrt/
