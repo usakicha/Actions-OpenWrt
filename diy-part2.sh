@@ -16,9 +16,12 @@
 wget -P ./target/linux/ipq40xx/patches-5.15/ https://raw.githubusercontent.com/usakicha/lede/master/target/linux/ipq40xx/patches-5.4/999-ipq40xx-unlock-cpu-frequency.patch
 echo "src-git cdnspeedtest https://github.com/immortalwrt-collections/openwrt-cdnspeedtest.git" >> "feeds.conf.default"
 echo "src-git cloudflarespeedtest https://github.com/mingxiaoyu/luci-app-cloudflarespeedtest.git" >> "feeds.conf.default"
+echo "src-git openwrt-vlmcsd https://github.com/mchome/openwrt-vlmcsd.git" >> "feeds.conf.default"
+echo "src-git luci-app-vlmcsd https://github.com/mchome/luci-app-vlmcsd.git" >> "feeds.conf.default"
 ./scripts/feeds update -a
 ./scripts/feeds install golang cdnspeedtest
 ./scripts/feeds install golang luci-app-cloudflarespeedtest
+./scripts/feeds install openwrt-vlmcsd luci-app-vlmcsd
 echo "src-git-full luci2 https://github.com/coolsnowwolf/luci.git" >> ./feeds.conf.default
 ./scripts/feeds update luci2
 ./scripts/feeds install luci-app-cpufreq
