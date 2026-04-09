@@ -1,0 +1,42 @@
+# The following settings require a restart of docker to take full effect, A reload will only have partial or no effect:
+# log_driver
+# bip
+# blocked_interfaces
+# device
+
+config globals 'globals'
+#       option alt_config_file '/etc/docker/daemon.json'
+        option data_root '/opt/docker/'
+#       option log_driver 'local'
+        option log_level 'warn'
+        
+        # 使用 Docker 29+ 的 native nftables 支持
+        option firewall_backend 'nftables'
+        
+        # 废弃 iptables 选项
+#       option iptables '1'
+
+#       list hosts 'unix:///var/run/docker.sock'
+#       option bip '172.18.0.1/24'
+#       option fixed_cidr '172.17.0.0/16'
+#       option fixed_cidr_v6 'fc00:1::/80'
+#       option ipv6 '1'
+#       option ip '::ffff:0.0.0.0'
+#       list dns '172.17.0.1'
+#       list registry_mirrors 'https://<my-docker-mirror-host>'
+#       list registry_mirrors 'https://hub.docker.com'
+
+# If your organization uses a proxy server to connect to the internet, you may need to configure the proxy.
+# See https://docs.docker.com/engine/daemon/proxy/ for more details
+config proxies 'proxies'
+#       option http_proxy 'http://proxy.example.com:3128'
+#       option https_proxy 'https://proxy.example.com:3129'
+#       option no_proxy '*.test.example.com,.example.org,127.0.0.0/8'
+
+# With OpenWrt 24.10 and Docker 29+, we use native nftables.
+# Docker will manage its own tables (likely 'ip docker' or similar) via the nftables backend.
+# The following configuration helps block external access to Docker containers if desired.
+
+config firewall 'firewall'
+        option device 'docker0'
+        list blocked_interfaces 'wan'
