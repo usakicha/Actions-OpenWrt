@@ -7,7 +7,7 @@ on:
         description: Enable SSH debug session
         required: false
         default: 'false'
-      config_url: https://la2cdn.10ve.live/config
+      config_url:
         description: Optional raw URL of .config (takes priority over repository .config)
         required: false
         default: ''
