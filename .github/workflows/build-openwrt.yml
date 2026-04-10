@@ -96,6 +96,12 @@ jobs:
         run: |
           cd openwrt
           make defconfig
+          # 目标 Makefile 的路径
+          GCC_MAKEFILE="feeds/packages/devel/gcc/Makefile"
+        
+          # 使用 sed 在 14.3.0 后面动态追加 15.2.0 的 skip 配置
+          sed -i '/ifeq ($(PKG_VERSION),14.3.0)/,/endif/a \
+          ifeq ($(PKG_VERSION),15.2.0)\n\tPKG_HASH:=skip\nendif' $GCC_MAKEFILE
           make download -j8
           find dl -size -1024c -exec rm -f {} \;
           make -j"$(nproc)" || make -j1 V=s
