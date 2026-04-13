@@ -95,6 +95,8 @@ jobs:
       - name: 5) Build firmware with existing config
         run: |
           cd openwrt
+          # 在 .config 中追加自定义的 CFLAGS 环境变量
+          echo 'CONFIG_TARGET_OPTIMIZATION="-O2 -pipe -D_GNU_SOURCE -Wno-error=implicit-function-declaration"' >> .config
           make defconfig
           # 目标 Makefile 的路径
           GCC_MAKEFILE="feeds/packages/devel/gcc/Makefile"
