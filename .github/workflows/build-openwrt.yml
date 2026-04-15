@@ -14,8 +14,8 @@ on:
   repository_dispatch:
 
 env:
-  REPO_URL: https://github.com/immortalwrt/immortalwrt.git
-  REPO_BRANCH: v25.12.0-rc1
+  REPO_URL: https://git.openwrt.org/openwrt/openwrt.git
+  REPO_BRANCH: v25.12.2
   CONFIG_FILE: .config
   FEEDS_CONF: feeds.conf.default
   DIY_P1_SH: diy-part1.sh
@@ -95,15 +95,7 @@ jobs:
       - name: 5) Build firmware with existing config
         run: |
           cd openwrt
-          # 在 .config 中追加自定义的 CFLAGS 环境变量
-          echo 'CONFIG_TARGET_OPTIMIZATION="-O2 -pipe -D_GNU_SOURCE -Wno-error=implicit-function-declaration"' >> .config
           make defconfig
-          # 目标 Makefile 的路径
-          GCC_MAKEFILE="feeds/packages/devel/gcc/Makefile"
-        
-          # 使用 sed 在 14.3.0 后面动态追加 15.2.0 的 skip 配置
-          sed -i '/ifeq ($(PKG_VERSION),14.3.0)/,/endif/a \
-          ifeq ($(PKG_VERSION),15.2.0)\n\tPKG_HASH:=skip\nendif' $GCC_MAKEFILE
           make download -j8
           find dl -size -1024c -exec rm -f {} \;
           make -j"$(nproc)" || make -j1 V=s
