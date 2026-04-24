@@ -1,21 +1,23 @@
-﻿name: Build OpenWrt
+name: Build OpenWrt
 
 on:
   workflow_dispatch:
     inputs:
       ssh:
-        description: Enable SSH debug session
+        description: 'Enable SSH debug session'
         required: false
-        default: 'false'
+        type: boolean
+        default: false
       config_url:
-        description: Optional raw URL of .config (takes priority over repository .config)
+        description: 'Optional raw URL of .config (takes priority over repository .config)'
         required: false
+        type: string
         default: ''
   repository_dispatch:
 
 env:
-  REPO_URL: https://git.openwrt.org/openwrt/openwrt.git
-  REPO_BRANCH: v25.12.2
+  REPO_URL: https://github.com/VIKINGYFY/immortalwrt.git
+  REPO_BRANCH: main
   CONFIG_FILE: .config
   FEEDS_CONF: feeds.conf.default
   DIY_P1_SH: diy-part1.sh
@@ -23,6 +25,8 @@ env:
   CUSTOM_SOURCE_DIR: custom
   UPLOAD_BIN_DIR: false
   TZ: Asia/Shanghai
+  # 强制所有使用旧版 Node 的 Actions（如 ssh2actions）直接在 Node 24 环境下运行，屏蔽警告
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -30,14 +34,25 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5 # 升级到 v5 (原生支持 Node 24)
+
+      - name: Free disk space (Optimize runner)
+        # 编译 OpenWrt 非常占用空间，提前移除 Runner 镜像中自带的无用庞大组件，避免编译期由于磁盘打满而失败
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          sudo apt-get clean
+          df -h
 
       - name: 1) Create OpenWrt build environment
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-            sudo apt-get -qq update
-            sudo apt-get -qq install \
+            sudo -E apt-get -qq update # 加上 -E 参数，确保 sudo 继承 DEBIAN_FRONTEND 环境隔离设置
+            sudo -E apt-get -qq install \
               ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
               bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext \
               gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 \
@@ -65,10 +80,11 @@ jobs:
       - name: 4) Apply custom source modifications
         run: |
           [ -d files ] && cp -r files openwrt/files
-          if [ -d "$CUSTOM_SOURCE_DIR" ]; then
+          if[ -d "$CUSTOM_SOURCE_DIR" ]; then
             rsync -a "$CUSTOM_SOURCE_DIR"/ openwrt/
           fi
-          CONFIG_URL="${{ github.event.inputs.config_url }}"
+          # 改用现代化的 inputs 调用方式
+          CONFIG_URL="${{ inputs.config_url }}"
           if [ -n "$CONFIG_URL" ]; then
             if ! curl -fsSL "$CONFIG_URL" -o openwrt/.config; then
               echo "config_url download failed, fallback to repository $CONFIG_FILE"
@@ -80,14 +96,14 @@ jobs:
           chmod +x "$DIY_P2_SH"
           cd openwrt
           mkdir -p dl
-          if [ -d "$GITHUB_WORKSPACE/$CUSTOM_SOURCE_DIR/dl" ]; then
+          if[ -d "$GITHUB_WORKSPACE/$CUSTOM_SOURCE_DIR/dl" ]; then
             rsync -a "$GITHUB_WORKSPACE/$CUSTOM_SOURCE_DIR/dl"/ dl/
           fi        
           "$GITHUB_WORKSPACE/$DIY_P2_SH"
 
       - name: Optional SSH debug
         uses: P3TERX/ssh2actions@v1.0.0
-        if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
+        if: (inputs.ssh == true) || contains(github.event.action, 'ssh')
         env:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -106,7 +122,7 @@ jobs:
           cd openwrt
           grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME || true
           DEVICE_NAME=""
-          if [ -s DEVICE_NAME ]; then
+          if[ -s DEVICE_NAME ]; then
             DEVICE_NAME="_$(cat DEVICE_NAME)"
           fi
           FILE_DATE="_$(date +"%Y%m%d%H%M")"
@@ -116,7 +132,7 @@ jobs:
           echo "firmware_dir=$FIRMWARE_DIR" >> "$GITHUB_OUTPUT"
 
       - name: 6) Upload firmware to GitHub Actions artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5 # 升级到 v5 (原生支持 Node 24)
         with:
           name: OpenWrt_firmware${{ steps.build_meta.outputs.device_name }}${{ steps.build_meta.outputs.file_date }}
           path: ${{ steps.build_meta.outputs.firmware_dir }}
@@ -124,7 +140,7 @@ jobs:
 
       - name: Upload full bin directory (optional)
         if: env.UPLOAD_BIN_DIR == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5 # 升级到 v5 (原生支持 Node 24)
         with:
           name: OpenWrt_bin${{ steps.build_meta.outputs.device_name }}${{ steps.build_meta.outputs.file_date }}
           path: openwrt/bin
