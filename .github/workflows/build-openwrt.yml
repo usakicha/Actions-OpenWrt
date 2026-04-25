@@ -80,7 +80,7 @@ jobs:
       - name: 4) Apply custom source modifications
         run: |
           [ -d files ] && cp -r files openwrt/files
-          if[ -d "$CUSTOM_SOURCE_DIR" ]; then
+          if [ -d "$CUSTOM_SOURCE_DIR" ]; then
             rsync -a "$CUSTOM_SOURCE_DIR"/ openwrt/
           fi
           # 改用现代化的 inputs 调用方式
@@ -90,13 +90,13 @@ jobs:
               echo "config_url download failed, fallback to repository $CONFIG_FILE"
               [ -f "$CONFIG_FILE" ] && cp "$CONFIG_FILE" openwrt/.config
             fi
-          elif [ -f "$CONFIG_FILE" ]; then
+          elif[ -f "$CONFIG_FILE" ]; then
             cp "$CONFIG_FILE" openwrt/.config
           fi
           chmod +x "$DIY_P2_SH"
           cd openwrt
           mkdir -p dl
-          if[ -d "$GITHUB_WORKSPACE/$CUSTOM_SOURCE_DIR/dl" ]; then
+          if [ -d "$GITHUB_WORKSPACE/$CUSTOM_SOURCE_DIR/dl" ]; then
             rsync -a "$GITHUB_WORKSPACE/$CUSTOM_SOURCE_DIR/dl"/ dl/
           fi        
           "$GITHUB_WORKSPACE/$DIY_P2_SH"
@@ -122,7 +122,7 @@ jobs:
           cd openwrt
           grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME || true
           DEVICE_NAME=""
-          if[ -s DEVICE_NAME ]; then
+          if [ -s DEVICE_NAME ]; then
             DEVICE_NAME="_$(cat DEVICE_NAME)"
           fi
           FILE_DATE="_$(date +"%Y%m%d%H%M")"
