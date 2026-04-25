@@ -9,7 +9,7 @@ on:
         type: boolean
         default: false
       config_url:
-        description: 'Optional raw URL of .config (takes priority over repository .config)'
+        description: Optional raw URL of .config (takes priority over repository .config)
         required: false
         type: string
         default: ''
@@ -25,7 +25,6 @@ env:
   CUSTOM_SOURCE_DIR: custom
   UPLOAD_BIN_DIR: false
   TZ: Asia/Shanghai
-  # 强制所有使用旧版 Node 的 Actions（如 ssh2actions）直接在 Node 24 环境下运行，屏蔽警告
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -36,22 +35,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Free disk space (Optimize runner)
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          sudo apt-get clean
-          df -h
-
       - name: 1) Create OpenWrt build environment
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-            sudo -E apt-get -qq update
-            sudo -E apt-get -qq install \
+            sudo apt-get -qq update
+            sudo apt-get -qq install \
               ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
               bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext \
               gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 \
@@ -68,7 +57,8 @@ jobs:
           git clone --depth 1 "$REPO_URL" -b "$REPO_BRANCH" openwrt
 
       - name: 3) Get pre-build resources (feeds)
-        run: |[ -f "$FEEDS_CONF" ] && cp "$FEEDS_CONF" openwrt/feeds.conf.default
+        run: |
+          [ -f "$FEEDS_CONF" ] && cp "$FEEDS_CONF" openwrt/feeds.conf.default
           chmod +x "$DIY_P1_SH"
           cd openwrt
           "$GITHUB_WORKSPACE/$DIY_P1_SH"
@@ -78,13 +68,14 @@ jobs:
       - name: 4) Apply custom source modifications
         run: |
           [ -d files ] && cp -r files openwrt/files
-          if[ -d "$CUSTOM_SOURCE_DIR" ]; then
+          if [ -d "$CUSTOM_SOURCE_DIR" ]; then
             rsync -a "$CUSTOM_SOURCE_DIR"/ openwrt/
           fi
-          CONFIG_URL="${{ inputs.config_url }}"
-          if[ -n "$CONFIG_URL" ]; then
+          CONFIG_URL="${{ github.event.inputs.config_url }}"
+          if [ -n "$CONFIG_URL" ]; then
             if ! curl -fsSL "$CONFIG_URL" -o openwrt/.config; then
-              echo "config_url download failed, fallback to repository $CONFIG_FILE"[ -f "$CONFIG_FILE" ] && cp "$CONFIG_FILE" openwrt/.config
+              echo "config_url download failed, fallback to repository $CONFIG_FILE"
+              [ -f "$CONFIG_FILE" ] && cp "$CONFIG_FILE" openwrt/.config
             fi
           elif [ -f "$CONFIG_FILE" ]; then
             cp "$CONFIG_FILE" openwrt/.config
@@ -99,7 +90,7 @@ jobs:
 
       - name: Optional SSH debug
         uses: P3TERX/ssh2actions@v1.0.0
-        if: (inputs.ssh == true) || contains(github.event.action, 'ssh')
+        if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
         env:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -136,7 +127,7 @@ jobs:
 
       - name: Upload full bin directory (optional)
         if: env.UPLOAD_BIN_DIR == 'true'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: OpenWrt_bin${{ steps.build_meta.outputs.device_name }}${{ steps.build_meta.outputs.file_date }}
           path: openwrt/bin
