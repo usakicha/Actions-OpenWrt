@@ -34,10 +34,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5 # 升级到 v5 (原生支持 Node 24)
+        uses: actions/checkout@v5
 
       - name: Free disk space (Optimize runner)
-        # 编译 OpenWrt 非常占用空间，提前移除 Runner 镜像中自带的无用庞大组件，避免编译期由于磁盘打满而失败
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
@@ -51,7 +50,7 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-            sudo -E apt-get -qq update # 加上 -E 参数，确保 sudo 继承 DEBIAN_FRONTEND 环境隔离设置
+            sudo -E apt-get -qq update
             sudo -E apt-get -qq install \
               ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
               bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext \
@@ -69,8 +68,7 @@ jobs:
           git clone --depth 1 "$REPO_URL" -b "$REPO_BRANCH" openwrt
 
       - name: 3) Get pre-build resources (feeds)
-        run: |
-          [ -f "$FEEDS_CONF" ] && cp "$FEEDS_CONF" openwrt/feeds.conf.default
+        run: |[ -f "$FEEDS_CONF" ] && cp "$FEEDS_CONF" openwrt/feeds.conf.default
           chmod +x "$DIY_P1_SH"
           cd openwrt
           "$GITHUB_WORKSPACE/$DIY_P1_SH"
@@ -80,17 +78,15 @@ jobs:
       - name: 4) Apply custom source modifications
         run: |
           [ -d files ] && cp -r files openwrt/files
-          if [ -d "$CUSTOM_SOURCE_DIR" ]; then
+          if[ -d "$CUSTOM_SOURCE_DIR" ]; then
             rsync -a "$CUSTOM_SOURCE_DIR"/ openwrt/
           fi
-          # 改用现代化的 inputs 调用方式
           CONFIG_URL="${{ inputs.config_url }}"
-          if [ -n "$CONFIG_URL" ]; then
+          if[ -n "$CONFIG_URL" ]; then
             if ! curl -fsSL "$CONFIG_URL" -o openwrt/.config; then
-              echo "config_url download failed, fallback to repository $CONFIG_FILE"
-              [ -f "$CONFIG_FILE" ] && cp "$CONFIG_FILE" openwrt/.config
+              echo "config_url download failed, fallback to repository $CONFIG_FILE"[ -f "$CONFIG_FILE" ] && cp "$CONFIG_FILE" openwrt/.config
             fi
-          elif[ -f "$CONFIG_FILE" ]; then
+          elif [ -f "$CONFIG_FILE" ]; then
             cp "$CONFIG_FILE" openwrt/.config
           fi
           chmod +x "$DIY_P2_SH"
@@ -132,7 +128,7 @@ jobs:
           echo "firmware_dir=$FIRMWARE_DIR" >> "$GITHUB_OUTPUT"
 
       - name: 6) Upload firmware to GitHub Actions artifacts
-        uses: actions/upload-artifact@v5 # 升级到 v5 (原生支持 Node 24)
+        uses: actions/upload-artifact@v5
         with:
           name: OpenWrt_firmware${{ steps.build_meta.outputs.device_name }}${{ steps.build_meta.outputs.file_date }}
           path: ${{ steps.build_meta.outputs.firmware_dir }}
@@ -140,7 +136,7 @@ jobs:
 
       - name: Upload full bin directory (optional)
         if: env.UPLOAD_BIN_DIR == 'true'
-        uses: actions/upload-artifact@v5 # 升级到 v5 (原生支持 Node 24)
+        uses: actions/upload-artifact@v5
         with:
           name: OpenWrt_bin${{ steps.build_meta.outputs.device_name }}${{ steps.build_meta.outputs.file_date }}
           path: openwrt/bin
