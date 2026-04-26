@@ -28,7 +28,8 @@ define Package/node-prebuilt
   SECTION:=lang
   CATEGORY:=Languages
   TITLE:=Node.js (Precompiled binary)
-  DEPENDS:=@aarch64 +libstdcpp
+  # 在此处追加了 +libpthread (同时建议带上 +librt 和 +libatomic 防范后续其他底层依赖报错)
+  DEPENDS:=@aarch64 +libstdcpp +libpthread +librt +libatomic
   URL:=https://nodejs.org/
 endef
 
