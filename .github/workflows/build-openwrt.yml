@@ -88,6 +88,21 @@ jobs:
           fi        
           "$GITHUB_WORKSPACE/$DIY_P2_SH"
 
+      - name: Cache Tools and Toolchain
+        uses: actions/cache@v5
+        with:
+          # 仅缓存关键的 host 工具和交叉编译工具链，避免缓存 target 导致冲突
+          path: |
+            openwrt/staging_dir/host*
+            openwrt/staging_dir/toolchain-*
+            openwrt/build_dir/host*
+            openwrt/build_dir/toolchain-*
+          # 以系统和 .config 文件的 hash 作为 key
+          key: ${{ runner.os }}-openwrt-toolchain-${{ hashFiles('openwrt/.config') }}
+          # 如果 .config 发生轻微变化（比如加了个插件），依然可以恢复之前的缓存，make 会自动判断是否需要部分更新
+          restore-keys: |
+            ${{ runner.os }}-openwrt-toolchain-
+
       - name: Optional SSH debug
         uses: P3TERX/ssh2actions@v1.0.0
         if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
