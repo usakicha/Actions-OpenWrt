@@ -9,11 +9,14 @@ on:
         type: boolean
         default: false
       config_url:
-        description: Optional raw URL of .config (takes priority over repository .config)
+        description: 'Optional raw URL of .config (takes priority over repository .config)'
         required: false
         type: string
         default: ''
   repository_dispatch:
+
+permissions:
+  contents: read
 
 env:
   REPO_URL: https://github.com/VIKINGYFY/immortalwrt.git
@@ -27,6 +30,11 @@ env:
   TZ: Asia/Shanghai
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+  # OpenWrt ccache
+  CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
+  CCACHE_COMPILERCHECK: content
+  CCACHE_MAXSIZE: 2G
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -39,110 +47,227 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-            sudo apt-get -qq update
-            sudo apt-get -qq install \
-              ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-              bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext \
-              gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 \
-              libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
-              libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool \
-              lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf \
-              python3 python3-pip python3-ply python3-docutils python3-setuptools rsync \
-              scons squashfs-tools subversion swig texinfo node-uglify upx-ucl unzip \
-              vim wget xmlto xxd zlib1g-dev zstd
-            sudo timedatectl set-timezone "$TZ"
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y \
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext \
+            gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 \
+            libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
+            libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool \
+            lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf \
+            python3 python3-pip python3-ply python3-docutils python3-setuptools rsync \
+            scons squashfs-tools subversion swig texinfo node-uglify upx-ucl unzip \
+            vim wget xmlto xxd zlib1g-dev zstd
+          sudo timedatectl set-timezone "$TZ"
 
       - name: 2) Download OpenWrt source code
         run: |
           git clone --depth 1 "$REPO_URL" -b "$REPO_BRANCH" openwrt
+          git -C openwrt log --oneline -1
 
-      - name: 3) Get pre-build resources (feeds)
+      - name: 3) Get pre-build resources feeds
         run: |
-          [ -f "$FEEDS_CONF" ] && cp "$FEEDS_CONF" openwrt/feeds.conf.default
-          chmod +x "$DIY_P1_SH"
+          if [ -f "$FEEDS_CONF" ]; then
+            cp "$FEEDS_CONF" openwrt/feeds.conf.default
+          fi
+
+          if [ -f "$DIY_P1_SH" ]; then
+            chmod +x "$DIY_P1_SH"
+          fi
+
           cd openwrt
-          "$GITHUB_WORKSPACE/$DIY_P1_SH"
+
+          if [ -f "$GITHUB_WORKSPACE/$DIY_P1_SH" ]; then
+            "$GITHUB_WORKSPACE/$DIY_P1_SH"
+          fi
+
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: 4) Apply custom source modifications
+      - name: 4) Apply custom source modifications and config
         run: |
-          [ -d files ] && cp -r files openwrt/files
+          if [ -d files ]; then
+            cp -r files openwrt/files
+          fi
+
           if [ -d "$CUSTOM_SOURCE_DIR" ]; then
             rsync -a "$CUSTOM_SOURCE_DIR"/ openwrt/
           fi
-          CONFIG_URL="${{ github.event.inputs.config_url }}"
+
+          CONFIG_URL="${{ inputs.config_url || '' }}"
+
           if [ -n "$CONFIG_URL" ]; then
             if ! curl -fsSL "$CONFIG_URL" -o openwrt/.config; then
               echo "config_url download failed, fallback to repository $CONFIG_FILE"
-              [ -f "$CONFIG_FILE" ] && cp "$CONFIG_FILE" openwrt/.config
+              if [ -f "$CONFIG_FILE" ]; then
+                cp "$CONFIG_FILE" openwrt/.config
+              fi
             fi
           elif [ -f "$CONFIG_FILE" ]; then
             cp "$CONFIG_FILE" openwrt/.config
           fi
-          chmod +x "$DIY_P2_SH"
-          cd openwrt
-          mkdir -p dl
-          if [ -d "$GITHUB_WORKSPACE/$CUSTOM_SOURCE_DIR/dl" ]; then
-            rsync -a "$GITHUB_WORKSPACE/$CUSTOM_SOURCE_DIR/dl"/ dl/
-          fi        
-          "$GITHUB_WORKSPACE/$DIY_P2_SH"
 
-      - name: Cache Tools and Toolchain
+          mkdir -p openwrt/dl
+
+          if [ -d "$GITHUB_WORKSPACE/$CUSTOM_SOURCE_DIR/dl" ]; then
+            rsync -a "$GITHUB_WORKSPACE/$CUSTOM_SOURCE_DIR/dl"/ openwrt/dl/
+          fi
+
+          if [ -f "$DIY_P2_SH" ]; then
+            chmod +x "$DIY_P2_SH"
+          fi
+
+          cd openwrt
+
+          if [ -f "$GITHUB_WORKSPACE/$DIY_P2_SH" ]; then
+            "$GITHUB_WORKSPACE/$DIY_P2_SH"
+          fi
+
+      - name: 5) Normalize config and enable ccache
+        run: |
+          cd openwrt
+
+          if [ ! -f .config ]; then
+            echo "::error::.config not found. Please provide repository .config or workflow config_url."
+            exit 1
+          fi
+
+          # Enable OpenWrt build ccache.
+          ./scripts/config -e CCACHE || echo 'CONFIG_CCACHE=y' >> .config
+
+          make defconfig
+
+          mkdir -p dl .ccache tmp
+
+          echo "OpenWrt target info:"
+          grep -E '^CONFIG_TARGET_|^CONFIG_CCACHE=' .config || true
+
+      - name: Generate cache metadata
+        id: cache_meta
+        run: |
+          cd openwrt
+
+          OPENWRT_COMMIT="$(git rev-parse --short=12 HEAD)"
+          TARGET_BOARD="$(grep '^CONFIG_TARGET_BOARD=' .config | cut -d '"' -f 2 || true)"
+          TARGET_SUBTARGET="$(grep '^CONFIG_TARGET_SUBTARGET=' .config | cut -d '"' -f 2 || true)"
+          TARGET_PROFILE="$(grep '^CONFIG_TARGET_PROFILE=' .config | cut -d '"' -f 2 || true)"
+
+          if [ -z "$TARGET_BOARD" ]; then
+            TARGET_BOARD="unknown-board"
+          fi
+
+          if [ -z "$TARGET_SUBTARGET" ]; then
+            TARGET_SUBTARGET="unknown-subtarget"
+          fi
+
+          if [ -z "$TARGET_PROFILE" ]; then
+            TARGET_PROFILE="unknown-profile"
+          fi
+
+          echo "openwrt_commit=$OPENWRT_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "target_board=$TARGET_BOARD" >> "$GITHUB_OUTPUT"
+          echo "target_subtarget=$TARGET_SUBTARGET" >> "$GITHUB_OUTPUT"
+          echo "target_profile=$TARGET_PROFILE" >> "$GITHUB_OUTPUT"
+
+          echo "openwrt_commit=$OPENWRT_COMMIT"
+          echo "target_board=$TARGET_BOARD"
+          echo "target_subtarget=$TARGET_SUBTARGET"
+          echo "target_profile=$TARGET_PROFILE"
+
+      - name: Cache downloads dl
         uses: actions/cache@v5
         with:
-          # 仅缓存关键的 host 工具和交叉编译工具链，避免缓存 target 导致冲突
+          path: openwrt/dl
+          key: ${{ runner.os }}-openwrt-dl-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-${{ hashFiles('openwrt/.config', 'openwrt/feeds.conf.default') }}
+          restore-keys: |
+            ${{ runner.os }}-openwrt-dl-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-
+            ${{ runner.os }}-openwrt-dl-
+
+      - name: Cache tools and toolchain
+        uses: actions/cache@v5
+        with:
           path: |
             openwrt/staging_dir/host*
             openwrt/staging_dir/toolchain-*
             openwrt/build_dir/host*
             openwrt/build_dir/toolchain-*
-          # 以系统和 .config 文件的 hash 作为 key
-          key: ${{ runner.os }}-openwrt-toolchain-${{ hashFiles('openwrt/.config') }}
-          # 如果 .config 发生轻微变化（比如加了个插件），依然可以恢复之前的缓存，make 会自动判断是否需要部分更新
+            openwrt/tmp
+          key: ${{ runner.os }}-openwrt-toolchain-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-${{ steps.cache_meta.outputs.openwrt_commit }}
           restore-keys: |
+            ${{ runner.os }}-openwrt-toolchain-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-
             ${{ runner.os }}-openwrt-toolchain-
+
+      - name: Cache ccache
+        uses: actions/cache@v5
+        with:
+          path: openwrt/.ccache
+          key: ${{ runner.os }}-openwrt-ccache-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-${{ steps.cache_meta.outputs.openwrt_commit }}
+          restore-keys: |
+            ${{ runner.os }}-openwrt-ccache-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-
+            ${{ runner.os }}-openwrt-ccache-
 
       - name: Optional SSH debug
         uses: P3TERX/ssh2actions@v1.0.0
-        if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.ssh == true) || contains(github.event.action || '', 'ssh') }}
         env:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-      - name: 5) Build firmware with existing config
+      - name: 6) Build firmware with existing config
         run: |
           cd openwrt
-          make defconfig
+
+          echo "ccache location: $CCACHE_DIR"
+          ccache -s || true
+
           make download -j8
+
+          # Remove obviously broken/incomplete downloads.
           find dl -size -1024c -exec rm -f {} \;
+
+          # Build. If parallel build fails, retry serial with verbose log.
           make -j"$(nproc)" || make -j1 V=s
+
+          ccache -s || true
 
       - name: Collect build output info
         id: build_meta
         run: |
           cd openwrt
-          grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME || true
-          DEVICE_NAME=""
-          if [ -s DEVICE_NAME ]; then
-            DEVICE_NAME="_$(cat DEVICE_NAME)"
+
+          DEVICE_NAME="$(grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' | head -n 1 || true)"
+
+          if [ -n "$DEVICE_NAME" ]; then
+            DEVICE_NAME="_$DEVICE_NAME"
           fi
+
           FILE_DATE="_$(date +"%Y%m%d%H%M")"
-          FIRMWARE_DIR="$(find "$GITHUB_WORKSPACE/openwrt/bin/targets" -mindepth 2 -maxdepth 2 -type d | head -n 1)"
+
+          FIRMWARE_DIR="$(find "$GITHUB_WORKSPACE/openwrt/bin/targets" -mindepth 2 -maxdepth 2 -type d | head -n 1 || true)"
+
+          if [ -z "$FIRMWARE_DIR" ] || [ ! -d "$FIRMWARE_DIR" ]; then
+            echo "::error::Firmware output directory not found."
+            find "$GITHUB_WORKSPACE/openwrt/bin" -maxdepth 5 -type f || true
+            exit 1
+          fi
+
           echo "device_name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
           echo "file_date=$FILE_DATE" >> "$GITHUB_OUTPUT"
           echo "firmware_dir=$FIRMWARE_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: 6) Upload firmware to GitHub Actions artifacts
-        uses: actions/upload-artifact@v5
+          echo "Firmware directory: $FIRMWARE_DIR"
+          find "$FIRMWARE_DIR" -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: 7) Upload firmware to GitHub Actions artifacts
+        uses: actions/upload-artifact@v6
         with:
           name: OpenWrt_firmware${{ steps.build_meta.outputs.device_name }}${{ steps.build_meta.outputs.file_date }}
           path: ${{ steps.build_meta.outputs.firmware_dir }}
           if-no-files-found: error
 
-      - name: Upload full bin directory (optional)
+      - name: Upload full bin directory optional
         if: env.UPLOAD_BIN_DIR == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: OpenWrt_bin${{ steps.build_meta.outputs.device_name }}${{ steps.build_meta.outputs.file_date }}
           path: openwrt/bin
