@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Actions-OpenWrt <actions-openwrt@users.noreply.github.com>
+Date: Thu, 11 Jun 2026 00:00:00 +0800
+Subject: [PATCH] handler: search delimiter in writable config buffer
+
+GCC 14 warns when assigning the result of strchr(attrs[i].name, ':') to a
+non-const pointer because attrs[i].name is const-qualified. The copied
+configuration name in dest is the buffer that is modified below, so search
+that writable buffer instead.
+---
+ handler.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- a/handler.c
++++ b/handler.c
+@@ -312,7 +312,7 @@ netifd_handler_parse_config(struct uci_b
+ 
+ 		attrs[i].name = dest;
+ 		str_cur += sprintf(dest, "%s", name) + 1;
+-		delim = strchr(attrs[i].name, ':');
++		delim = strchr(dest, ':');
+ 		if (delim) {
+ 			*delim = '\0';
+ 			validate[i] = ++delim;
