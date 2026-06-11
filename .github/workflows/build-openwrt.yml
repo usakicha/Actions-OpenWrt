@@ -174,8 +174,9 @@ jobs:
           echo "target_subtarget=$TARGET_SUBTARGET"
           echo "target_profile=$TARGET_PROFILE"
 
-      - name: Cache downloads dl
-        uses: actions/cache@v5
+      - name: Restore downloads dl cache
+        id: cache_dl
+        uses: actions/cache/restore@v5
         with:
           path: openwrt/dl
           key: ${{ runner.os }}-openwrt-dl-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-${{ hashFiles('openwrt/.config', 'openwrt/feeds.conf.default') }}
@@ -183,8 +184,9 @@ jobs:
             ${{ runner.os }}-openwrt-dl-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-
             ${{ runner.os }}-openwrt-dl-
 
-      - name: Cache tools and toolchain
-        uses: actions/cache@v5
+      - name: Restore tools and toolchain cache
+        id: cache_toolchain
+        uses: actions/cache/restore@v5
         with:
           path: |
             openwrt/staging_dir/host*
@@ -197,12 +199,14 @@ jobs:
             ${{ runner.os }}-openwrt-toolchain-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-
             ${{ runner.os }}-openwrt-toolchain-
 
-      - name: Cache ccache
-        uses: actions/cache@v5
+      - name: Restore ccache
+        id: cache_ccache
+        uses: actions/cache/restore@v5
         with:
           path: openwrt/.ccache
-          key: ${{ runner.os }}-openwrt-ccache-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-${{ steps.cache_meta.outputs.openwrt_commit }}
+          key: ${{ runner.os }}-openwrt-ccache-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-${{ steps.cache_meta.outputs.openwrt_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
+            ${{ runner.os }}-openwrt-ccache-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-${{ steps.cache_meta.outputs.openwrt_commit }}-
             ${{ runner.os }}-openwrt-ccache-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-
             ${{ runner.os }}-openwrt-ccache-
 
@@ -213,22 +217,64 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-      - name: 6) Build firmware with existing config
+      - name: 6) Download source archives
         run: |
           cd openwrt
-
-          echo "ccache location: $CCACHE_DIR"
-          ccache -s || true
 
           make download -j8
 
           # Remove obviously broken/incomplete downloads.
           find dl -size -1024c -exec rm -f {} \;
 
+      - name: Save downloads dl cache
+        if: steps.cache_dl.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: openwrt/dl
+          key: ${{ steps.cache_dl.outputs.cache-primary-key }}
+
+      - name: 7) Build tools and toolchain
+        run: |
+          cd openwrt
+
+          echo "ccache location: $CCACHE_DIR"
+          ccache -s || true
+
+          make tools/install -j"$(nproc)" || make tools/install -j1 V=s
+          make toolchain/install -j"$(nproc)" || make toolchain/install -j1 V=s
+
+          ccache -s || true
+
+      - name: Save tools and toolchain cache
+        if: steps.cache_toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            openwrt/staging_dir/host*
+            openwrt/staging_dir/toolchain-*
+            openwrt/build_dir/host*
+            openwrt/build_dir/toolchain-*
+            openwrt/tmp
+          key: ${{ steps.cache_toolchain.outputs.cache-primary-key }}
+
+      - name: 8) Build firmware with existing config
+        run: |
+          cd openwrt
+
+          echo "ccache location: $CCACHE_DIR"
+          ccache -s || true
+
           # Build. If parallel build fails, retry serial with verbose log.
           make -j"$(nproc)" || make -j1 V=s
 
           ccache -s || true
+
+      - name: Save ccache
+        if: always() && steps.cache_ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: openwrt/.ccache
+          key: ${{ steps.cache_ccache.outputs.cache-primary-key }}
 
       - name: Collect build output info
         id: build_meta

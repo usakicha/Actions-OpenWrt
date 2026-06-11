@@ -8,16 +8,22 @@ non-const pointer because attrs[i].name is const-qualified. The copied
 configuration name in dest is the buffer that is modified below, so search
 that writable buffer instead.
 ---
- handler.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ handler.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
 
 --- a/handler.c
 +++ b/handler.c
-@@ -312,7 +312,7 @@ netifd_handler_parse_config(struct uci_b
+@@ -310,9 +310,10 @@ netifd_handler_parse_config(struct uci_b
+ 	for (i = 0; i < config->n_params; i++) {
+ 		const char *name = attrs[i].name;
+ 		char *delim;
++		char *dest = str_cur;
  
- 		attrs[i].name = dest;
- 		str_cur += sprintf(dest, "%s", name) + 1;
+-		attrs[i].name = str_cur;
+-		str_cur += sprintf(str_cur, "%s", name) + 1;
 -		delim = strchr(attrs[i].name, ':');
++		attrs[i].name = dest;
++		str_cur += sprintf(dest, "%s", name) + 1;
 +		delim = strchr(dest, ':');
  		if (delim) {
  			*delim = '\0';
