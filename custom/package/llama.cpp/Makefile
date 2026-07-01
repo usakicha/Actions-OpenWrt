@@ -3,7 +3,7 @@ include $(TOPDIR)/rules.mk
 
 # ==================== 包元数据 ====================
 PKG_NAME:=llama-cpp
-PKG_VERSION:=b4627
+PKG_VERSION:=0.0.0_git20260622
 PKG_RELEASE:=1
 
 # 使用Git从GitHub主仓库获取源码
@@ -25,7 +25,7 @@ define Package/llama-cpp
   CATEGORY:=Utilities
   TITLE:=Port of Facebook's LLaMA model in C/C++
   URL:=https://github.com/ggml-org/llama.cpp
-  DEPENDS:=+libstdcpp +libpthread
+  DEPENDS:=+libstdcpp +libpthread +libatomic 
 endef
 
 define Package/llama-cpp/description
@@ -42,6 +42,9 @@ CMAKE_OPTIONS += \
     -DLLAMA_BUILD_TESTS=OFF \
     -DLLAMA_BUILD_SERVER=ON \
     -DLLAMA_BUILD_APP=OFF
+	-DBUILD_SHARED_LIBS=OFF \
+    -DLLAMA_OPENSSL=OFF \
+    -DGGML_CURL=OF
 
 # ---- 自动根据CPU架构启用优化选项 ----
 # $(ARCH) 是OpenWrt buildroot 内置变量，例如：arm, x86, mips, powerpc 等
