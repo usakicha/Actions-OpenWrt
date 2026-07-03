@@ -9,7 +9,7 @@ PKG_RELEASE:=1
 # 使用Git从GitHub主仓库获取源码
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/ggml-org/llama.cpp.git
-PKG_SOURCE_VERSION:=master
+PKG_SOURCE_VERSION:=7c082bc417bbe53210a83df4ba5b49e18ce6193c
 PKG_MIRROR_HASH:=skip
 
 # 包含OpenWrt的包构建框架
@@ -25,7 +25,7 @@ define Package/llama-cpp
   CATEGORY:=Utilities
   TITLE:=Port of Facebook's LLaMA model in C/C++
   URL:=https://github.com/ggml-org/llama.cpp
-  DEPENDS:=+libstdcpp +libpthread +libatomic 
+  DEPENDS:=+libstdcpp +libpthread +libatomic
 endef
 
 define Package/llama-cpp/description
@@ -41,10 +41,10 @@ CMAKE_OPTIONS += \
     -DLLAMA_BUILD_EXAMPLES=OFF \
     -DLLAMA_BUILD_TESTS=OFF \
     -DLLAMA_BUILD_SERVER=ON \
-    -DLLAMA_BUILD_APP=OFF
-	-DBUILD_SHARED_LIBS=OFF \
+    -DLLAMA_BUILD_APP=OFF \
+    -DBUILD_SHARED_LIBS=OFF \
     -DLLAMA_OPENSSL=OFF \
-    -DGGML_CURL=OF
+    -DGGML_CURL=OFF
 
 # ---- 自动根据CPU架构启用优化选项 ----
 # $(ARCH) 是OpenWrt buildroot 内置变量，例如：arm, x86, mips, powerpc 等

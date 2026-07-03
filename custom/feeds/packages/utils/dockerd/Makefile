@@ -1,53 +1,53 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=dockerd
-PKG_VERSION:=29.2.0
+PKG_VERSION:=29.4.1
 PKG_RELEASE:=1
 PKG_LICENSE:=Apache-2.0
 PKG_LICENSE_FILES:=LICENSE
+PKG_CPE_ID:=cpe:/a:mobyproject:moby
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_GIT_URL:=github.com/moby/moby
-PKG_GIT_REF:=v$(PKG_VERSION)
+PKG_GIT_REF:=docker-v$(PKG_VERSION)
 PKG_SOURCE_URL:=https://codeload.$(PKG_GIT_URL)/tar.gz/$(PKG_GIT_REF)?
-
-# --- 请在此处填入下载文件的 SHA256 ---
-PKG_HASH:=d73ca30d4a859690b7a4525c98bb2cfb79498db64b4604012983210a55562287
-# --- 请在此处填入该版本对应的 Git Short Commit (7位) ---
-PKG_GIT_SHORT_COMMIT:=9c62384
+PKG_HASH:=89ef4a0f681ae2c9f7449591243e1e932d86e6086ac3392a47da80c10b1a3d58
+PKG_GIT_SHORT_COMMIT:=6c91b92 # SHA1 used within the docker executables
 
 PKG_MAINTAINER:=Gerard Ryan <G.M0N3Y.2503@gmail.com>
 
 PKG_BUILD_DEPENDS:=golang/host
 PKG_BUILD_PARALLEL:=1
-PKG_BUILD_FLAGS:=no-mips16
 
 GO_PKG:=github.com/docker/docker
 
 include $(INCLUDE_DIR)/package.mk
 include ../../lang/golang/golang-package.mk
 
+EMPTY:=
+SPACE:= $(EMPTY) $(EMPTY)
+ARCH_DEPENDS:=@($(subst $(SPACE),||,$(strip $(filter-out mips mips64 mipsel mips64el,$(subst ||,$(SPACE),$(patsubst @(%),%,$(GO_ARCH_DEPENDS)))))))
+
 define Package/dockerd/config
   source "$(SOURCE)/Config.in"
 endef
 
-# 修改了 DEPENDS：移除了 iptables 相关，加入了 nftables 和 firewall4
 define Package/dockerd
   SECTION:=utils
   CATEGORY:=Utilities
   TITLE:=Docker Community Edition Daemon
   URL:=https://www.docker.com/
-  DEPENDS:=$(GO_ARCH_DEPENDS) \
+  DEPENDS:=$(ARCH_DEPENDS) \
     +ca-certificates \
     +containerd \
-    +nftables \
+    +firewall4 \
+    +KERNEL_SECCOMP:libseccomp \
+    +kmod-nft-bridge \
     +kmod-nft-core \
     +kmod-nft-nat \
-    +kmod-nft-bridge \
+    +nftables \
     +kmod-veth \
-    +tini \
-    +firewall4 \
-    @!(mips||mips64||mipsel)
+    +tini
   USERID:=docker:docker
   MENU:=1
 endef
@@ -57,28 +57,45 @@ define Package/dockerd/conffiles
 endef
 
 define Package/dockerd/description
-The Docker CE Engine with native nftables support.
+  The Docker CE Engine with native nftables firewall support.
 endef
 
 TAR_OPTIONS:=--strip-components 1 $(TAR_OPTIONS)
 TAR_CMD=$(HOST_TAR) -C $(1) $(TAR_OPTIONS)
 TARGET_LDFLAGS += $(if $(CONFIG_USE_GLIBC),-lc -lgcc_eh)
 
-# 下面的 Version 检查逻辑保留，但如果你手动修改了版本，请确保 containerd 等组件版本兼容
-# 如果编译报错版本不匹配，可能需要注释掉 EnsureVendoredVersion 调用
+# $(1) = OpenWrt dependent PKG_NAME
+define EnsureVendoredVersion
+	DEP_VER=$$$$( grep --only-matching --perl-regexp '(?<=PKG_VERSION:=)(.*)' "../$(1)/Makefile" ); \
+	VEN_VER=$$$$( grep --only-matching --perl-regexp '(?<=$(call toupper,$(1))_VERSION=v)(.*)' "$(PKG_BUILD_DIR)/Dockerfile" ); \
+	if [ "$$$${VEN_VER}" != "$$$${DEP_VER}" ]; then \
+		echo "ERROR: $(PKG_NAME) Expected 'PKG_VERSION:=$$$${VEN_VER}' in '$(1)', found 'PKG_VERSION:=$$$${DEP_VER}'"; \
+		exit 1; \
+	fi
+endef
 
 define Build/Prepare
 	$(Build/Prepare/Default)
-	
+
+	# Verify dependencies are the vendored version
+	$(call EnsureVendoredVersion,containerd)
+	$(call EnsureVendoredVersion,runc)
+	$(call EnsureVendoredVersion,tini)
+
+	# Verify CLI is the same version
+	CLI_MAKEFILE="../docker/Makefile"; \
+	CLI_VERSION=$$$$( grep --only-matching --perl-regexp '(?<=PKG_VERSION:=)(.*)' "$$$${CLI_MAKEFILE}" ); \
+	if [ "$$$${CLI_VERSION}" != "$(PKG_VERSION)" ]; then \
+		echo "ERROR: Expected 'PKG_VERSION:=$(PKG_VERSION)' in '$$$${CLI_MAKEFILE}', found 'PKG_VERSION:=$$$${CLI_VERSION}'"; \
+		exit 1; \
+	fi
+
 	# Verify PKG_GIT_SHORT_COMMIT
-	( \
-	        EXPECTED_PKG_GIT_SHORT_COMMIT=$$$$( $(CURDIR)/git-short-commit.sh '$(PKG_GIT_URL)' '$(PKG_GIT_REF)' '$(TMP_DIR)/git-short-commit/$(PKG_NAME)-$(PKG_VERSION)' 2>/dev/null || true ); \
-	        if [ -z "$$$${EXPECTED_PKG_GIT_SHORT_COMMIT}" ]; then \
-	                 echo "Skipping PKG_GIT_SHORT_COMMIT verification for offline/local-source builds."; \
-	        elif [ "$$$${EXPECTED_PKG_GIT_SHORT_COMMIT}" != "$(strip $(PKG_GIT_SHORT_COMMIT))" ]; then \
-	                 echo "WARNING: Expected 'PKG_GIT_SHORT_COMMIT:=$$$${EXPECTED_PKG_GIT_SHORT_COMMIT}', found 'PKG_GIT_SHORT_COMMIT:=$(strip $(PKG_GIT_SHORT_COMMIT))'"; \
-	        fi \
-	)
+	EXPECTED_PKG_GIT_SHORT_COMMIT=$$$$( $(CURDIR)/git-short-commit.sh '$(PKG_GIT_URL)' '$(PKG_GIT_REF)' '$(TMP_DIR)/git-short-commit/$(PKG_NAME)-$(PKG_VERSION)' ); \
+	if [ "$$$${EXPECTED_PKG_GIT_SHORT_COMMIT}" != "$(strip $(PKG_GIT_SHORT_COMMIT))" ]; then \
+		echo "ERROR: Expected 'PKG_GIT_SHORT_COMMIT:=$$$${EXPECTED_PKG_GIT_SHORT_COMMIT}', found 'PKG_GIT_SHORT_COMMIT:=$(strip $(PKG_GIT_SHORT_COMMIT))'"; \
+		exit 1; \
+	fi
 endef
 
 BUILDTAGS:=
@@ -90,14 +107,12 @@ BUILDTAGS += selinux
 endif
 
 define Build/Compile
-	( \
-	        cd $(PKG_BUILD_DIR); \
-	        $(GO_PKG_VARS) \
-	        DOCKER_GITCOMMIT=$(PKG_GIT_SHORT_COMMIT) \
-	        DOCKER_BUILDTAGS='$(BUILDTAGS)' \
-	        VERSION=$(PKG_VERSION) \
-	        ./hack/make.sh binary; \
-	)
+	cd $(PKG_BUILD_DIR); \
+	$(GO_PKG_VARS) \
+	DOCKER_GITCOMMIT=$(PKG_GIT_SHORT_COMMIT) \
+	DOCKER_BUILDTAGS='$(BUILDTAGS)' \
+	VERSION=$(PKG_VERSION) \
+	./hack/make.sh binary
 endef
 
 define Package/dockerd/install
@@ -118,11 +133,6 @@ define Package/dockerd/install
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_CONF) ./files/etc/config/dockerd $(1)/etc/config/dockerd
 
-	# 移除了 sysctl-br-netfilter-ip.conf 的安装，因为 nftables 模式下通常不需要强制加载 br_netfilter 模块来让 iptables 处理桥接流量
-	# 如果需要，可以保留，但这里为了纯净 nftables 环境将其注释
-	# $(INSTALL_DIR) $(1)/etc/sysctl.d
-	# $(INSTALL_DATA) ./files/etc/sysctl.d/sysctl-br-netfilter-ip.conf \
-	#        $(1)/etc/sysctl.d/12-br-netfilter-ip.conf
 endef
 
 define Package/dockerd/postinst
