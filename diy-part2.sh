@@ -14,7 +14,7 @@
 #sed -i 's/192.168.1.1/192.168.50.5/g' package/base-files/files/bin/config_generate
 
 git clone --depth=1 https://github.com/laipeng668/luci-app-gecoosac package/luci-app-gecoosac
-sed -i 's/PKG_HASH:=x/PKG_HASH:=skip/g' feeds/packages/devel/gcc/Makefile
+sed -i 's|include $(INCLUDE_DIR)/package.mk|PKG_HASH?=skip\ninclude $(INCLUDE_DIR)/package.mk|g' feeds/packages/devel/gcc/Makefile
 #echo "src-git cdnspeedtest https://github.com/immortalwrt-collections/openwrt-cdnspeedtest.git" >> "feeds.conf.default"
 #echo "src-git cloudflarespeedtest https://github.com/mingxiaoyu/luci-app-cloudflarespeedtest.git" >> "feeds.conf.default"
 #echo "src-git openwrt-vlmcsd https://github.com/mchome/openwrt-vlmcsd.git" >> "feeds.conf.default"
