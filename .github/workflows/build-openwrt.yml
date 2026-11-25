@@ -1,4 +1,4 @@
-name: Build BE6L Pro (validation)
+name: Build AP8220
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ jobs:
   build:
     uses: ./.github/workflows/build-firmware.yml
     with:
-      device: be6l-pro
+      device: ap8220
       config_url: ${{ inputs.config_url || '' }}
       ssh: ${{ inputs.ssh == true }}
     secrets:
