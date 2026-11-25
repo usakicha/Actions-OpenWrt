@@ -1,0 +1,20 @@
+name: Build BE6L Pro
+
+on:
+  workflow_dispatch:
+    inputs:
+      config_url:
+        description: 'Optional HTTPS URL of .config (overrides the BE6L Pro default)'
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-firmware.yml
+    with:
+      device: be6l-pro
+      config_url: ${{ inputs.config_url }}
