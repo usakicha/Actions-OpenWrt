@@ -19,8 +19,8 @@ permissions:
   contents: read
 
 env:
-  REPO_URL: https://github.com/VIKINGYFY/immortalwrt.git
-  REPO_BRANCH: main
+  REPO_URL: https://github.com/immortalwrt/immortalwrt.git
+  REPO_TAG: v25.12.2
   CONFIG_FILE: .config
   FEEDS_CONF: feeds.conf.default
   DIY_P1_SH: diy-part1.sh
@@ -37,7 +37,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout repository
@@ -51,10 +51,10 @@ jobs:
           sudo apt-get -qq install -y \
             ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
             bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext \
-            gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 \
+            genisoimage git gperf haveged help2man intltool \
             libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
             libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool \
-            lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf \
+            lrzsz msmtp nano ninja-build p7zip p7zip-full patch pkgconf \
             python3 python3-pip python3-ply python3-docutils python3-setuptools rsync \
             scons squashfs-tools subversion swig texinfo node-uglify upx-ucl unzip \
             vim wget xmlto xxd zlib1g-dev zstd
@@ -62,7 +62,8 @@ jobs:
 
       - name: 2) Download OpenWrt source code
         run: |
-          git clone --depth 1 "$REPO_URL" -b "$REPO_BRANCH" openwrt
+          git clone --depth 1 --branch "$REPO_TAG" "$REPO_URL" openwrt
+          test "$(git -C openwrt rev-parse HEAD)" = "$(git -C openwrt rev-parse "refs/tags/$REPO_TAG^{commit}")"
           git -C openwrt log --oneline -1
 
       - name: 3) Get pre-build resources feeds
@@ -194,21 +195,21 @@ jobs:
             openwrt/build_dir/host*
             openwrt/build_dir/toolchain-*
             openwrt/tmp
-          key: ${{ runner.os }}-openwrt-toolchain-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-${{ steps.cache_meta.outputs.openwrt_commit }}
+          key: ${{ runner.os }}-${{ runner.arch }}-openwrt-toolchain-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-${{ steps.cache_meta.outputs.openwrt_commit }}
           restore-keys: |
-            ${{ runner.os }}-openwrt-toolchain-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-
-            ${{ runner.os }}-openwrt-toolchain-
+            ${{ runner.os }}-${{ runner.arch }}-openwrt-toolchain-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-
+            ${{ runner.os }}-${{ runner.arch }}-openwrt-toolchain-
 
       - name: Restore ccache
         id: cache_ccache
         uses: actions/cache/restore@v5
         with:
           path: openwrt/.ccache
-          key: ${{ runner.os }}-openwrt-ccache-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-${{ steps.cache_meta.outputs.openwrt_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ${{ runner.os }}-${{ runner.arch }}-openwrt-ccache-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-${{ steps.cache_meta.outputs.openwrt_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            ${{ runner.os }}-openwrt-ccache-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-${{ steps.cache_meta.outputs.openwrt_commit }}-
-            ${{ runner.os }}-openwrt-ccache-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-
-            ${{ runner.os }}-openwrt-ccache-
+            ${{ runner.os }}-${{ runner.arch }}-openwrt-ccache-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-${{ steps.cache_meta.outputs.openwrt_commit }}-
+            ${{ runner.os }}-${{ runner.arch }}-openwrt-ccache-${{ steps.cache_meta.outputs.target_board }}-${{ steps.cache_meta.outputs.target_subtarget }}-
+            ${{ runner.os }}-${{ runner.arch }}-openwrt-ccache-
 
       - name: Optional SSH debug
         uses: P3TERX/ssh2actions@v1.0.0
