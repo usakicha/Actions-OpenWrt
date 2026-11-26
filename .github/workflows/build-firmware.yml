@@ -61,7 +61,7 @@ jobs:
               subtarget=generic
               profile=mobipromo_cm520-79f
               ;;
-            be6l-pro)
+            be6l-pro|be6l-pro-arm64)
               repo_url=https://github.com/x-wrt/x-wrt.git
               repo_tag=26.10_b202611040756
               config_file=configs/be6l-pro.config
@@ -106,6 +106,14 @@ jobs:
           git clone --depth 1 --branch "$REPO_TAG" "$REPO_URL" openwrt
           test "$(git -C openwrt rev-parse HEAD)" = "$(git -C openwrt rev-parse "refs/tags/$REPO_TAG^{commit}")"
           git -C openwrt log --oneline -1
+
+      - name: Apply BE6L Pro ARM64 patch
+        if: inputs.device == 'be6l-pro-arm64'
+        run: |
+          test "$(git -C openwrt rev-parse HEAD)" = cc7d9dc35c0b46fd431f782f4d5bc5d7a604b689
+          patch="$GITHUB_WORKSPACE/patches/be6l-pro-arm64.patch"
+          git -C openwrt apply "$patch"
+          sha256sum "$patch"
 
       - name: 3) Get pre-build resources feeds
         run: |
@@ -160,6 +168,12 @@ jobs:
           if ! grep -Fxq "CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_PROFILE}=y" .config ||
              ! grep -Fxq "CONFIG_TARGET_PROFILE=\"DEVICE_${TARGET_PROFILE}\"" .config; then
             echo "::error::The effective .config must select $TARGET_BOARD/$TARGET_SUBTARGET/$TARGET_PROFILE."
+            exit 1
+          fi
+
+          if [ "$DEVICE" = be6l-pro-arm64 ] &&
+             ! grep -Fxq 'CONFIG_TARGET_ARCH_PACKAGES="aarch64_cortex-a53"' .config; then
+            echo "::error::The effective .config must use aarch64_cortex-a53."
             exit 1
           fi
 
@@ -289,6 +303,15 @@ jobs:
              [ -z "$(find "$FIRMWARE_DIR" -maxdepth 1 -type f -name "*${TARGET_PROFILE}*-sysupgrade.bin" -size +0c -print -quit)" ]; then
             echo "::error::Sysupgrade image for $TARGET_PROFILE not found."
             exit 1
+          fi
+
+          if [ "$DEVICE" = be6l-pro-arm64 ]; then
+            initramfs="$(find "$FIRMWARE_DIR" -maxdepth 1 -type f -name "*${TARGET_PROFILE}*-initramfs-kernel.bin" -size +0c -print -quit)"
+            if [ -z "$initramfs" ] || [ "$(fdtget "$initramfs" /images/kernel-1 arch)" != arm64 ]; then
+              echo "::error::ARM64 initramfs FIT image for $TARGET_PROFILE not found."
+              exit 1
+            fi
+            DEVICE_NAME="${DEVICE_NAME}_arm64-experimental"
           fi
 
           echo "device_name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"

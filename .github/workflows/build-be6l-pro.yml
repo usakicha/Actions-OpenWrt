@@ -3,6 +3,13 @@ name: Build BE6L Pro
 on:
   workflow_dispatch:
     inputs:
+      architecture:
+        description: 'Firmware architecture (ARM64 is experimental)'
+        type: choice
+        options:
+          - arm64
+          - arm32
+        default: arm64
       config_url:
         description: 'Optional HTTPS URL of .config (overrides the BE6L Pro default)'
         type: string
@@ -16,5 +23,5 @@ jobs:
   build:
     uses: ./.github/workflows/build-firmware.yml
     with:
-      device: be6l-pro
+      device: ${{ inputs.architecture == 'arm64' && 'be6l-pro-arm64' || 'be6l-pro' }}
       config_url: ${{ inputs.config_url }}
